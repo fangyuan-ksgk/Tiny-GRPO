@@ -127,9 +127,9 @@ def main(args):
 
     model = optimize_model_memory(model)
     
-    # print("\nInitial model evaluation before finetuning:")
-    # pre_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device, env, args.max_completion_length)
-    # print(f"Pre-GRPO Accuracy: {pre_grpo_accuracy:.2f}%")
+    print("\nInitial model evaluation before finetuning:")
+    pre_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device, env, args.max_completion_length)
+    print(f"Pre-GRPO Accuracy: {pre_grpo_accuracy:.2f}%")
 
     wandb.init(project=os.environ["WANDB_PROJECT"], reinit=True)
     print("Weights & Biases initialized.")
