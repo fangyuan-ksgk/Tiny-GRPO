@@ -183,9 +183,7 @@ def grpo_loss(model, ref_model, rollout_data, tokenizer, reward_function,
     surrogate_loss = torch.min(ratio * advantages, torch.clamp(ratio, 1-epsilon, 1+epsilon) * advantages)
     kl = torch.exp(ref_log_probs - new_log_probs) - (ref_log_probs - new_log_probs) - 1
     per_token_loss = surrogate_loss - beta * kl
-    # loss = - ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
-
-    loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
+    loss = - ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
     del kl, surrogate_loss, per_token_loss
     
     return loss, avg_reward 
