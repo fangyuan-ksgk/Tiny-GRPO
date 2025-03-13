@@ -1,2 +1,4 @@
-# Tiny-GRPO
-minimal GRPO implementation from scratch
+# grpo-from-scrath
+
+Minimal implementation of GRPO
+
