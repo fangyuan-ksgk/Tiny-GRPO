@@ -6,8 +6,7 @@
 
 Minimal implementation of **Group Relative Policy Optimization (GRPO)** (DeepSeek) from scratch. No complicated file structure—just a **simple, hackable implementation** with few scripts for better understanding of the algorithm.  
 
-Inspired by the implementation by [@aburkov](https://github.com/aburkov).  
-This implementation optimizes **memory usage** during training by:  
+Inspired by the implementation by [@aburkov](https://github.com/aburkov). This implementation optimizes **memory usage** during training by:  
 - Using **chunk-wise softmax operations**  
 - Leveraging **mixed precision training**  
 Together, these techniques reduce memory usage by **50%**, enabling GRPO to run on singel GPU while achieving strong results on **math datasets**. 
