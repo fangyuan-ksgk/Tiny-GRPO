@@ -2,7 +2,7 @@
 
 # GRPO from scratch 
 
-![image](./assets/grpo.png)
+![image](/assets/grpo.png)
 
 </div>
 
