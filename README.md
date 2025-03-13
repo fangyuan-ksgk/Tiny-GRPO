@@ -1,7 +1,5 @@
 <div align="center">
 
-# GRPO from scratch 
-
 ![Tiny_po](https://github.com/user-attachments/assets/82a6488e-9434-4192-a97c-0d4af4823f8d)
 
 </div>
