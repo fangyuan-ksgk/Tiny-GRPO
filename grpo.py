@@ -57,7 +57,7 @@ def selective_log_softmax(logits, input_ids, chunk_size=64):
         chunk_logits = logits[:, i:end_idx, :]
         chunk_ids = input_ids[:, i:end_idx]
         chunk_log_probs = nn.functional.log_softmax(chunk_logits, dim=-1)
-        print(" - chunkwise softmax computation GPU memory: ", get_memory_usage()) 
+        # print(" - chunkwise softmax computation GPU memory: ", get_memory_usage()) 
         log_probs[:, i:end_idx] = chunk_log_probs.gather(
             dim=-1, index=chunk_ids.unsqueeze(-1)).squeeze(-1)
         del chunk_logits, chunk_log_probs
@@ -89,18 +89,13 @@ def create_completion_mask(completion_ids, eos_token_id):
 
 def generate_completions(model, tokenizer, prompts, device, num_generations=4, max_completion_length=32, env=None):
     """Generate multiple completions for each prompt, record completion mask (end-of-sequence)"""
-    print(f"Memory before tokenization: {get_memory_usage()}")
     inputs = tokenizer(prompts, return_tensors="pt", padding=True, padding_side="left")
     prompt_ids = inputs["input_ids"].to(device)
     prompt_mask = inputs["attention_mask"].to(device)
-    print(f"Memory after moving inputs to device: {get_memory_usage()}")
-    print(f"Input batch size: {prompt_ids.size(0)}, Device before model: {prompt_ids.device}")
     prompt_length = prompt_ids.size(1) # Question: sequences within batch should have different length? This leads to wrong completion mask?
     prompt_ids = prompt_ids.repeat_interleave(num_generations, dim=0)
     prompt_mask = prompt_mask.repeat_interleave(num_generations, dim=0)
-    print(f"Memory after repeating inputs: {get_memory_usage()}")
     with env['ctx']:
-        print(f"Memory before generation: {get_memory_usage()}")
         outputs = model.generate(
             prompt_ids,
             attention_mask=prompt_mask,
@@ -111,8 +106,6 @@ def generate_completions(model, tokenizer, prompts, device, num_generations=4, m
             eos_token_id=tokenizer.eos_token_id,
             early_stopping=False
         ) # Important: same length outputs from this generate function
-        print(f"Memory after generation: {get_memory_usage()}")
-    print(f"Output batch size: {outputs.size(0)}, Device after model: {outputs.device}")
     completion_ids = outputs[:, prompt_length:]
     completion_mask = create_completion_mask(completion_ids, tokenizer.eos_token_id) # completion mask excludes eos_token and suffix tokens
     return prompt_ids, prompt_mask, completion_ids, completion_mask
@@ -120,30 +113,25 @@ def generate_completions(model, tokenizer, prompts, device, num_generations=4, m
 
 def generate_rollout_data(model, ref_model, tokenizer, batch_samples, device, num_generations, max_completion_length, env, chunk=64):
     """Generate responses and calculate log-probabilities of each response under two model"""
-    print(f"Memory before rollout generation: {get_memory_usage()}")
     prompts = [sample["prompt"] if isinstance(sample, dict) else sample[0] for sample in batch_samples]
     answers = [sample["answer"] if isinstance(sample, dict) else sample[1] for sample in batch_samples]
     with torch.no_grad():
         prompt_ids, prompt_mask, completion_ids, completion_mask = generate_completions(
             model, tokenizer, prompts, device, num_generations, max_completion_length, env
         )
-        print(f"Memory after completions: {get_memory_usage()}")
         input_ids = torch.cat([prompt_ids, completion_ids], dim=1)
         attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)
         logits_to_keep = completion_ids.size(1) # same question: whether dim=1 is same across in-batch sequences 
         # AR perplexity based RL (Issue #1) --> can we use 'skippy loss'
         # hidden-space RL (Idea #1) --> rollout on latent space?
         
-        print(f"Memory before computing log probs: {get_memory_usage()}")
         old_log_probs = compute_log_probs(model, input_ids, attention_mask, logits_to_keep, env, chunk)
         ref_log_probs = compute_log_probs(ref_model, input_ids, attention_mask, logits_to_keep, env, chunk) # ref is base model ? (also used in KL regularization I recall) 
-        print(f"Memory after computing log probs: {get_memory_usage()}")
         
     # one-turn completion & reward assignment (Issue #2)
     formatted_completions = [[{'content': tokenizer.decode(ids, skip_special_tokens=True)}] for ids in completion_ids]
     repeated_prompts = [p for p in prompts for _ in range(num_generations)]
     repeated_answers = [a for a in answers for _ in range(num_generations)]
-    print(f"Memory after rollout generation: {get_memory_usage()}")
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -167,7 +155,6 @@ def grpo_loss(model, ref_model, rollout_data, tokenizer, reward_function,
     - conservative advantage clipping
     - kl regularization
     """
-    print(f"Memory before computing GRPO loss: {get_memory_usage()}")
     input_ids = rollout_data["input_ids"]
     attention_mask = rollout_data["attention_mask"]
     completion_mask = rollout_data["completion_mask"]
@@ -175,19 +162,15 @@ def grpo_loss(model, ref_model, rollout_data, tokenizer, reward_function,
     old_log_probs = rollout_data["old_log_probs"]
     ref_log_probs = rollout_data["ref_log_probs"]
 
-    print(f"Memory before computing new log probs: {get_memory_usage()}")
     new_log_probs = compute_log_probs(model, input_ids, attention_mask, logits_to_keep, env, chunk)
-    print(f"Memory after computing new log probs: {get_memory_usage()}")
 
     # ratio: between new and old
     ratio = torch.exp(new_log_probs - old_log_probs)
-    print(f"Memory before reward computation: {get_memory_usage()}")
     rewards = torch.tensor(
         reward_function(completions=rollout_data["formatted_completions"],                            answers=rollout_data["repeated_answers"]), 
         dtype=torch.float32, 
         device=device
     )
-    print(f"Memory after reward computation: {get_memory_usage()}")
 
 
     batch_size = rollout_data["batch_size"]
@@ -195,19 +178,19 @@ def grpo_loss(model, ref_model, rollout_data, tokenizer, reward_function,
 
     # group refers to 'num_genereations' over each prompt, literally 'best-of-N', relative advantage is calculated here
     rewards = rewards.view(batch_size, num_generations)
+    print("Reward: ", rewards)
     avg_reward = rewards.mean().item() 
     print("Average Reward: ", avg_reward) # avg in batch 
     mean_rewards = rewards.mean(dim=1).repeat_interleave(num_generations)
     std_rewards = rewards.std(dim=1).repeat_interleave(num_generations)
     advantages = ((rewards.view(-1) - mean_rewards) / (std_rewards + 1e-4)).unsqueeze(1)
-
+    print("Advantage: ", advantages) 
     surrogate_loss = torch.min(ratio * advantages, torch.clamp(ratio, 1-epsilon, 1+epsilon) * advantages)
     kl = torch.exp(ref_log_probs - new_log_probs) - (ref_log_probs - new_log_probs) - 1
+    print(f"- surrogate loss: {surrogate_loss} - kl loss: {kl}")
     per_token_loss = surrogate_loss - beta * kl
     loss = - ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
-    
     del kl, surrogate_loss, per_token_loss
-    print(f"Memory after GRPO loss computation: {get_memory_usage()}")
     
     return loss, avg_reward 
 
@@ -219,17 +202,14 @@ def train_with_grpo(model, tokenizer, train_data,
                     env=None, gradient_accumulation_steps=1):
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"Initial memory state (train_with_grpo): {get_memory_usage()}")
 
     for iteration in range(num_iterations): 
         print(f"\nIteration {iteration+1}/{num_iterations}")
 
-        print(f"Memory before creating reference model: {get_memory_usage()}")
         ref_model = copy.deepcopy(model)
         ref_model.eval() 
         for param in ref_model.parameters(): 
             param.requires_grad = False 
-        print(f"Memory after creating reference model: {get_memory_usage()}")
         print("Reference model created")
 
         # re-initialize optimizer 
@@ -237,7 +217,7 @@ def train_with_grpo(model, tokenizer, train_data,
         model.train() 
 
         for step in range(num_steps): 
-            print(f"\nStep {step+1}/{num_steps} - Memory at step start: {get_memory_usage()}")
+            print(f"\nStep {step+1}/{num_steps}")
             batch_samples = random.sample(train_data, batch_size)
                 
             with torch.no_grad():
@@ -255,10 +235,9 @@ def train_with_grpo(model, tokenizer, train_data,
                 # Clear cache after generating rollouts
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                    print(f"Memory after rollout cache clearing: {get_memory_usage()}")
                 
             for grpo_iter in range(mu): 
-                print(f"GRPO inner loop {grpo_iter+1}/{mu} - Memory at start: {get_memory_usage()}")
+                print(f"GRPO inner loop {grpo_iter+1}/{mu}")
                 loss, avg_reward = grpo_loss(
                     model, 
                     ref_model, 
@@ -271,17 +250,13 @@ def train_with_grpo(model, tokenizer, train_data,
                     env=env
                 )
                 optimizer.zero_grad()
-                print(f"Memory before backward pass: {get_memory_usage()}")
                 loss.backward() 
-                print(f"Memory after backward pass: {get_memory_usage()}")
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1)
                 optimizer.step()
-                print(f"Memory after optimizer step: {get_memory_usage()}")
                 
                 # Clear cache after each iteration
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                    print(f"Memory after cache clearing: {get_memory_usage()}")
 
                 # log to wandb
                 wandb.log({
