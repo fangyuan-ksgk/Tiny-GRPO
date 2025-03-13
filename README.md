@@ -4,13 +4,13 @@
 
 </div>
 
-Minimal implementation of GRPO (https://arxiv.org/abs/2402.03300) from scratch. Inspired by implementation by @aburkov. I optimize the memory usage in the training process, specifically the softmax operation into chunk-wise operations and uses mixed precision training, together they reduces memory usage by 50% and one could run GRPO with ~20GB GPU memory and obtain nice results on math datasets. No complicated file structure, just a simple implementation that's easy to hack to your need and further understanding of the algorithm. 
+Minimal implementation of **Group Relative Policy Optimization (GRPO)** (DeepSeek) from scratch. No complicated file structure—just a **simple, hackable implementation** with few scripts for better understanding of the algorithm.  
 
-🔥 Features
-✅ Lightweight & Easy to Understand – Simple structure, no complex file organization.
-✅ Memory Optimized – Chunk-wise softmax operations & mixed precision training reduce memory usage by 50%.
-✅ Efficient Training – Run GRPO with ~20GB GPU memory and achieve strong results on math datasets.
-✅ Hackable – Easily modify and experiment with the core algorithm.
+Inspired by the implementation by [@aburkov](https://github.com/aburkov).  
+This implementation optimizes **memory usage** during training by:  
+- Using **chunk-wise softmax operations**  
+- Leveraging **mixed precision training**  
+Together, these techniques reduce memory usage by **50%**, enabling GRPO to run on singel GPU while achieving strong results on **math datasets**. 
 
 set up environment 
 ```bash
