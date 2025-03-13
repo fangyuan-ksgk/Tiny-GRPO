@@ -64,14 +64,12 @@ def selective_log_softmax(logits, input_ids, chunk_size=64):
         torch.cuda.empty_cache()
     return log_probs
 
-def compute_log_probs(model, input_ids, attention_mask, logits_to_keep, env=None, chunk=64): 
-    """log prob for specific token sequence"""
-    with env['ctx']:
+def compute_log_probs(model, input_ids, attention_mask, logits_to_keep, env, chunk_size=64): 
+    with env['ctx']: 
         logits = model(input_ids=input_ids, attention_mask=attention_mask).logits[:, :-1, :]
-    input_ids = input_ids[:, 1:1+logits_to_keep]  # Fixed slicing to align with logits
-    logits = logits[:, -logits_to_keep:, :]
-    return selective_log_softmax(logits, input_ids, chunk)  # Fixed function name with asterisks
-
+    input_ids = input_ids[:, -logits_to_keep:]
+    logits = logits[:, -logits_to_keep:, :]  
+    return selective_log_softmax(logits, input_ids, chunk_size)
 
 def create_completion_mask(completion_ids, eos_token_id):
 
@@ -178,18 +176,16 @@ def grpo_loss(model, ref_model, rollout_data, tokenizer, reward_function,
 
     # group refers to 'num_genereations' over each prompt, literally 'best-of-N', relative advantage is calculated here
     rewards = rewards.view(batch_size, num_generations)
-    print("Reward: ", rewards)
     avg_reward = rewards.mean().item() 
-    print("Average Reward: ", avg_reward) # avg in batch 
     mean_rewards = rewards.mean(dim=1).repeat_interleave(num_generations)
     std_rewards = rewards.std(dim=1).repeat_interleave(num_generations)
     advantages = ((rewards.view(-1) - mean_rewards) / (std_rewards + 1e-4)).unsqueeze(1)
-    print("Advantage: ", advantages) 
     surrogate_loss = torch.min(ratio * advantages, torch.clamp(ratio, 1-epsilon, 1+epsilon) * advantages)
     kl = torch.exp(ref_log_probs - new_log_probs) - (ref_log_probs - new_log_probs) - 1
-    print(f"- surrogate loss: {surrogate_loss} - kl loss: {kl}")
     per_token_loss = surrogate_loss - beta * kl
-    loss = - ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
+    # loss = - ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
+
+    loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
     del kl, surrogate_loss, per_token_loss
     
     return loss, avg_reward 
@@ -231,7 +227,7 @@ def train_with_grpo(model, tokenizer, train_data,
                     max_completion_length,
                     env
                 )
-                print(" - Example response: \n", rollout_data['formatted_completions'][0][0]['content'])
+                print("\n\n------------------------ \n Example response: \n", rollout_data['formatted_completions'][0][0]['content'])
                 # Clear cache after generating rollouts
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
@@ -269,7 +265,7 @@ def train_with_grpo(model, tokenizer, train_data,
                 
 
                 print(f"Iteration {iteration+1}/{num_iterations}, Step {step+1}/{num_steps}, "
-                      f"GRPO iter {grpo_iter+1}/{mu}, loss: {loss.item():.4f}")
+                      f"GRPO iter {grpo_iter+1}/{mu}, loss: {loss.item():.4f}, reward: {avg_reward}")
 
                 del loss # explicitly delete loss to free memory
     

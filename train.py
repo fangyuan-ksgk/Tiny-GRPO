@@ -3,6 +3,7 @@ from gsm8k_data import extract_gsm8k_answer, gsm8k_metric
 import os 
 from contextlib import nullcontext
 
+
 def setup_training_environment(device_name, dtype = "bfloat16"):
     """set up mixed precision (for memory optimization)"""
     
@@ -120,15 +121,15 @@ def main(args):
 
     all_data = prepare_dataset("train")
     random.shuffle(all_data)
-    size_of_eval_data = 3 # change to a smaller value to save time or to a larger number for a more reliable estimate
+    size_of_eval_data = 30 # change to a smaller value to save time or to a larger number for a more reliable estimate
     eval_data = all_data[:size_of_eval_data]
     train_data = all_data[size_of_eval_data:]
 
     model = optimize_model_memory(model)
     
-    print("\nInitial model evaluation before finetuning:")
-    pre_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device, env, args.max_completion_length)
-    print(f"Pre-GRPO Accuracy: {pre_grpo_accuracy:.2f}%")
+    # print("\nInitial model evaluation before finetuning:")
+    # pre_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device, env, args.max_completion_length)
+    # print(f"Pre-GRPO Accuracy: {pre_grpo_accuracy:.2f}%")
 
     wandb.init(project=os.environ["WANDB_PROJECT"], reinit=True)
     print("Weights & Biases initialized.")
@@ -170,21 +171,21 @@ if __name__ == "__main__":
                         help="Model name or path")
     parser.add_argument("--output_dir", type=str, default="./output", 
                         help="Directory to save the model")
-    parser.add_argument("--num_iterations", type=int, default=1, 
+    parser.add_argument("--num_iterations", type=int, default=8, 
                         help="Number of iterations")
-    parser.add_argument("--num_steps", type=int, default=500, 
+    parser.add_argument("--num_steps", type=int, default=400, 
                         help="Number of steps per iteration")
-    parser.add_argument("--batch_size", type=int, default=4, 
+    parser.add_argument("--batch_size", type=int, default=6, 
                         help="Batch size")
-    parser.add_argument("--num_generations", type=int, default=5, 
+    parser.add_argument("--num_generations", type=int, default=8, 
                         help="Number of generations per example")
-    parser.add_argument("--max_completion_length", type=int, default=400, 
+    parser.add_argument("--max_completion_length", type=int, default=512, 
                         help="Maximum completion length")
-    parser.add_argument("--beta", type=float, default=0.04, 
+    parser.add_argument("--beta", type=float, default=0.1, 
                         help="Beta parameter for GRPO")
     parser.add_argument("--learning_rate", type=float, default=5e-6, 
                         help="Learning rate")
-    parser.add_argument("--mu", type=float, default=1, 
+    parser.add_argument("--mu", type=float, default=6, 
                         help="Mu parameter for GRPO")
     parser.add_argument("--epsilon", type=float, default=0.1, 
                         help="Epsilon parameter for GRPO")
