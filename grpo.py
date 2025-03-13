@@ -251,6 +251,7 @@ def train_with_grpo(model, tokenizer, train_data,
                     max_completion_length,
                     env
                 )
+                print(" - Example response: \n", rollout_data['formatted_completions'][0][0]['content'])
                 # Clear cache after generating rollouts
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()

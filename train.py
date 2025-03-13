@@ -23,8 +23,7 @@ def setup_training_environment(device_name, dtype = "bfloat16"):
     
 env = setup_training_environment("cuda" if torch.cuda.is_available() else "cpu")
     
-def evaluate_model(model, tokenizer, eval_examples, device):
-
+def evaluate_model(model, tokenizer, eval_examples, device, env, max_completion_length):
    model.eval()
    correct = 0
    total = len(eval_examples)
@@ -43,7 +42,7 @@ def evaluate_model(model, tokenizer, eval_examples, device):
            with env['ctx']:
                outputs = model.generate(
                    inputs,
-                   max_new_tokens=512,
+                   max_new_tokens=max_completion_length,
                    temperature=0.7,
                    num_return_sequences=1,
                    pad_token_id=tokenizer.pad_token_id,
@@ -121,14 +120,14 @@ def main(args):
 
     all_data = prepare_dataset("train")
     random.shuffle(all_data)
-    size_of_eval_data = 30 # change to a smaller value to save time or to a larger number for a more reliable estimate
+    size_of_eval_data = 3 # change to a smaller value to save time or to a larger number for a more reliable estimate
     eval_data = all_data[:size_of_eval_data]
     train_data = all_data[size_of_eval_data:]
 
     model = optimize_model_memory(model)
     
     print("\nInitial model evaluation before finetuning:")
-    pre_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device)
+    pre_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device, env, args.max_completion_length)
     print(f"Pre-GRPO Accuracy: {pre_grpo_accuracy:.2f}%")
 
     wandb.init(project=os.environ["WANDB_PROJECT"], reinit=True)
@@ -155,7 +154,7 @@ def main(args):
     print("Training completed and wandb run finished.")
 
     print("\nFinal model evaluation after GRPO RL fine-tuning:")
-    post_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device)
+    post_grpo_accuracy = evaluate_model(model, tokenizer, eval_data, device, env, args.max_completion_length)
     print(f"Post-GRPO Accuracy: {post_grpo_accuracy:.2f}%")
 
     print("\nSaving GRPO fine-tuned model...")
