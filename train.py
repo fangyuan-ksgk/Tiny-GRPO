@@ -171,7 +171,7 @@ if __name__ == "__main__":
                         help="Model name or path")
     parser.add_argument("--output_dir", type=str, default="./output", 
                         help="Directory to save the model")
-    parser.add_argument("--num_iterations", type=int, default=8, 
+    parser.add_argument("--num_iterations", type=int, default=2, 
                         help="Number of iterations")
     parser.add_argument("--num_steps", type=int, default=400, 
                         help="Number of steps per iteration")
